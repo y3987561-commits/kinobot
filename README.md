@@ -5,6 +5,7 @@ Telegram kino boti — Railway'da ishlaydigan professional bot.
 ## Funksiyalar
 
 ### 👤 Foydalanuvchi
+
 - Kino kodi orqali qidirish (masalan: `KN001`)
 - Nom bo'yicha qidirish
 - 🏆 Top 5 eng ko'p ko'rilgan kinolar
