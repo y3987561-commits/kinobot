@@ -1,6 +1,5 @@
 import sqlite3
 from datetime import datetime
-
 DB = "bot.db"
 
 def db():
