@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/31013453/README.md)
 # 🎬 KinoBot
 
 Telegram kino boti — Railway'da ishlaydigan professional bot.
