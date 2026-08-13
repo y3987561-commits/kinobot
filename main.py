@@ -289,23 +289,30 @@ async def send_movie(msg, code, uid, edit=False):
         return
     caption = movie_caption(m)
     kb      = movie_kb(m, uid)
-    if m[3]:  # poster bor
-        try:
-            await msg.answer_photo(photo=m[3], caption=caption, reply_markup=kb)
-            await bot.send_document(msg.chat.id, document=m[4],
-                                    caption=f"🎬 <b>{m[1]}</b> — yuklab olish")
-            return
-        except Exception:
-            pass
+   if m[3]:  # poster bor
+            try:
+                await msg.answer_photo(photo=m[3], caption=caption, reply_markup=kb)
+                await bot.send_document(msg.chat.id, document=m[4],
+                                        caption=f"🎬 <b>{m[1]}</b> — yuklab olish")
+                return
+            except Exception:
+                pass
+        if m[4]:
+            try:
+                await bot.send_document(msg.chat.id, document=m[4],
+                                        caption=caption, reply_markup=kb)
+                return
+            except Exception:
+                pass
     # fayl yuborish
-    try:
-        await msg.answer_video(m[4], caption=caption, reply_markup=kb)
-    except Exception:
-        try:
-            await msg.answer_document(m[4], caption=caption, reply_markup=kb)
-        except Exception:
-            await msg.answer(caption + f"\n\n🔗 {m[4]}", reply_markup=kb)
-
+    if m[4]:
+            try:
+                await bot.send_document(msg.chat.id, document=m[4],
+                                        caption=caption, reply_markup=kb)
+                return
+            except Exception:
+                pass
+        await msg.answer(caption, reply_markup=kb)
 # ── Admin: qo'shish ───────────────────────────────────────
 @dp.message(F.text.in_(["➕ Kino qo'shish", "➕ Serial qo'shish"]))
 async def add_start(msg: types.Message, state: FSMContext):
