@@ -280,8 +280,6 @@ async def cb_delconfirm(cb: types.CallbackQuery):
 async def cb_delcancel(cb: types.CallbackQuery):
     await cb.message.edit_text("❌ Bekor qilindi.")
     await cb.answer()
-
-# ── Send movie ────────────────────────────────────────────
 async def send_movie(msg, code, uid, edit=False):
     m = get_by_code(code)
     if not m:
@@ -289,21 +287,22 @@ async def send_movie(msg, code, uid, edit=False):
         return
     caption = movie_caption(m)
     kb      = movie_kb(m, uid)
-   if m[3]:  # poster bor
-            try:
-                await msg.answer_photo(photo=m[3], caption=caption, reply_markup=kb)
-                await bot.send_document(msg.chat.id, document=m[4],
-                                        caption=f"🎬 <b>{m[1]}</b> — yuklab olish")
-                return
-            except Exception:
-                pass
-        if m[4]:
-            try:
-                await bot.send_document(msg.chat.id, document=m[4],
-                                        caption=caption, reply_markup=kb)
-                return
-            except Exception:
-                pass
+    if m[3]:
+        try:
+            await msg.answer_photo(photo=m[3], caption=caption, reply_markup=kb)
+            await bot.send_document(msg.chat.id, document=m[4],
+                                    caption=f"🎬 <b>{m[1]}</b> — yuklab olish")
+            return
+        except Exception:
+            pass
+    if m[4]:
+        try:
+            await bot.send_document(msg.chat.id, document=m[4],
+                                    caption=caption, reply_markup=kb)
+            return
+        except Exception:
+            pass
+    await msg.answer(caption, reply_markup=kb)
     # fayl yuborish
     if m[4]:
             try:
