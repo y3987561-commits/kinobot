@@ -149,7 +149,8 @@ class Broadcast(StatesGroup):
     msg = State()
 
 # ── Bot ───────────────────────────────────────────────────
-bot = Bot(token=TOKEN, parse_mode="HTML")
+from aiogram.client.default import DefaultBotProperties
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp  = Dispatcher(storage=MemoryStorage())
 
 def is_admin(uid): return uid in ADMINS
