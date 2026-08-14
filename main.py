@@ -1,126 +1,3 @@
-import sqlite3
-from datetime import datetime
-
-DB = "bot.db"
-
-def db():
-    return sqlite3.connect(DB)
-
-def init():
-    with db() as c:
-        c.executescript("""
-            CREATE TABLE IF NOT EXISTS users (
-                id        INTEGER PRIMARY KEY,
-                username  TEXT DEFAULT '',
-                name      TEXT DEFAULT '',
-                joined    TEXT DEFAULT '',
-                banned    INTEGER DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS movies (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                title       TEXT NOT NULL,
-                code        TEXT UNIQUE NOT NULL,
-                file_id     TEXT NOT NULL,
-                poster_id   TEXT DEFAULT '',
-                type        TEXT DEFAULT 'movie',
-                year        TEXT DEFAULT '',
-                genre       TEXT DEFAULT '',
-                duration    TEXT DEFAULT '',
-                description TEXT DEFAULT '',
-                added       TEXT DEFAULT '',
-                views       INTEGER DEFAULT 0,
-                likes       INTEGER DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS liked (
-                user_id  INTEGER,
-                movie_id INTEGER,
-                PRIMARY KEY (user_id, movie_id)
-            );
-        """)
-
-def save_user(uid, username, name):
-    with db() as c:
-        c.execute("INSERT OR IGNORE INTO users (id,username,name,joined) VALUES (?,?,?,?)",
-                  (uid, username or '', name, datetime.now().strftime("%d.%m.%Y")))
-
-def get_user(uid):
-    with db() as c:
-        return c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-
-def ban(uid):
-    with db() as c:
-        c.execute("UPDATE users SET banned=1 WHERE id=?", (uid,))
-
-def unban(uid):
-    with db() as c:
-        c.execute("UPDATE users SET banned=0 WHERE id=?", (uid,))
-
-def all_users():
-    with db() as c:
-        return c.execute("SELECT * FROM users WHERE banned=0").fetchall()
-
-def stats():
-    with db() as c:
-        total  = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        active = c.execute("SELECT COUNT(*) FROM users WHERE banned=0").fetchone()[0]
-        banned = c.execute("SELECT COUNT(*) FROM users WHERE banned=1").fetchone()[0]
-        movies = c.execute("SELECT COUNT(*) FROM movies WHERE type='movie'").fetchone()[0]
-        serial = c.execute("SELECT COUNT(*) FROM movies WHERE type='serial'").fetchone()[0]
-        views  = c.execute("SELECT COALESCE(SUM(views),0) FROM movies").fetchone()[0]
-    return total, active, banned, movies, serial, views
-
-def add_movie(title, code, file_id, poster_id, mtype, year, genre, duration, desc):
-    try:
-        with db() as c:
-            c.execute("""INSERT INTO movies
-                (title,code,file_id,poster_id,type,year,genre,duration,description,added)
-                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (title, code.upper(), file_id, poster_id, mtype, year, genre, duration, desc,
-                 datetime.now().strftime("%d.%m.%Y")))
-        return True
-    except sqlite3.IntegrityError:
-        return False
-
-def get_by_code(code):
-    with db() as c:
-        r = c.execute("SELECT * FROM movies WHERE code=?", (code.upper(),)).fetchone()
-        if r:
-            c.execute("UPDATE movies SET views=views+1 WHERE code=?", (code.upper(),))
-        return r
-
-def search(q):
-    with db() as c:
-        return c.execute("SELECT * FROM movies WHERE title LIKE ? LIMIT 8", (f"%{q}%",)).fetchall()
-
-def delete_movie(code):
-    with db() as c:
-        c.execute("DELETE FROM movies WHERE code=?", (code.upper(),))
-
-def toggle_like(uid, mid):
-    with db() as c:
-        exists = c.execute("SELECT 1 FROM liked WHERE user_id=? AND movie_id=?", (uid, mid)).fetchone()
-        if exists:
-            c.execute("DELETE FROM liked WHERE user_id=? AND movie_id=?", (uid, mid))
-            c.execute("UPDATE movies SET likes=likes-1 WHERE id=?", (mid,))
-            return False
-        else:
-            c.execute("INSERT INTO liked VALUES (?,?)", (uid, mid))
-            c.execute("UPDATE movies SET likes=likes+1 WHERE id=?", (mid,))
-            return True
-
-def is_liked(uid, mid):
-    with db() as c:
-        return bool(c.execute("SELECT 1 FROM liked WHERE user_id=? AND movie_id=?", (uid, mid)).fetchone())
-
-def get_by_id(mid):
-    with db() as c:
-        return c.execute("SELECT * FROM movies WHERE id=?", (mid,)).fetchone()
-
-def top_movies(limit=5):
-    with db() as c:
-        return c.execute("SELECT * FROM movies ORDER BY views DESC LIMIT ?", (limit,)).fetchall()
-
-
 import asyncio, logging, os, threading
 from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
@@ -133,6 +10,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
+from database import (
+    init, save_user, get_user, ban, unban, all_users,
+    stats, add_movie, get_by_code, search, delete_movie,
+    toggle_like, is_liked, get_by_id, top_movies
+)
 
 load_dotenv()
 TOKEN    = os.getenv("BOT_TOKEN")
@@ -149,8 +31,7 @@ class Broadcast(StatesGroup):
     msg = State()
 
 # ── Bot ───────────────────────────────────────────────────
-from aiogram.client.default import DefaultBotProperties
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+bot = Bot(token=TOKEN, parse_mode="HTML")
 dp  = Dispatcher(storage=MemoryStorage())
 
 def is_admin(uid): return uid in ADMINS
@@ -286,32 +167,25 @@ async def cb_delcancel(cb: types.CallbackQuery):
 async def send_movie(msg, code, uid, edit=False):
     m = get_by_code(code)
     if not m:
-        await msg.answer('<b>Kino topilmadi.</b> Kodni togri kiritdingizmi?')
+        await msg.answer("❌ <b>Kino topilmadi.</b>\n\nKodni to'g'ri kiritdingizmi?")
         return
     caption = movie_caption(m)
     kb      = movie_kb(m, uid)
-    if m[3]:
+    # m[3]=file_id, m[4]=poster_id
+    if m[4]:  # poster bor - avval yuborish
         try:
-            await msg.answer_photo(photo=m[3], caption=caption, reply_markup=kb)
-            await bot.send_document(msg.chat.id, document=m[4],
-                                    caption=f'Kino: {m[1]} - yuklab olish')
-            return
+            await msg.answer_photo(photo=m[4], caption=caption, reply_markup=kb)
         except Exception:
             pass
-    if m[4]:
+    # video/fayl yuborish
+    try:
+        await bot.send_video(msg.chat.id, video=m[3], caption=f"🎬 <b>{m[1]}</b>")
+    except Exception:
         try:
-            await bot.send_video(msg.chat.id, video=m[4],
-                                 caption=caption, reply_markup=kb)
-            return
+            await bot.send_document(msg.chat.id, document=m[3], caption=f"🎬 <b>{m[1]}</b>")
         except Exception:
-            pass
-        try:
-            await bot.send_document(msg.chat.id, document=m[4],
-                                    caption=caption, reply_markup=kb)
-            return
-        except Exception:
-            pass
-    await msg.answer(caption, reply_markup=kb)
+            if not m[4]:
+                await msg.answer(caption, reply_markup=kb)
 
 # ── Admin: qo'shish ───────────────────────────────────────
 @dp.message(F.text.in_(["➕ Kino qo'shish", "➕ Serial qo'shish"]))
