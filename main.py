@@ -300,6 +300,12 @@ async def send_movie(msg, code, uid, edit=False):
             pass
     if m[4]:
         try:
+            await bot.send_video(msg.chat.id, video=m[4],
+                                 caption=caption, reply_markup=kb)
+            return
+        except Exception:
+            pass
+        try:
             await bot.send_document(msg.chat.id, document=m[4],
                                     caption=caption, reply_markup=kb)
             return
